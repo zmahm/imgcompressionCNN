@@ -49,6 +49,14 @@ export default function QuantizationViz({ data }) {
 
   const { original_values = [], quantized_values = [] } = data;
 
+  const avgError = original_values.length > 0
+    ? (original_values.reduce((sum, v, i) => sum + Math.abs(v - (quantized_values[i] ?? Math.round(v))), 0) / original_values.length).toFixed(3)
+    : null;
+  const maxError = original_values.length > 0
+    ? Math.max(...original_values.map((v, i) => Math.abs(v - (quantized_values[i] ?? Math.round(v))))).toFixed(3)
+    : null;
+  const unchanged = original_values.filter((v, i) => (quantized_values[i] ?? Math.round(v)) === Math.round(v) && Math.abs(v - Math.round(v)) < 0.05).length;
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
       <div className="flex items-center gap-4 text-xs">
@@ -73,14 +81,26 @@ export default function QuantizationViz({ data }) {
         ))}
       </div>
 
-      <div className="bg-slate-900/60 rounded-xl p-3 text-xs text-slate-400 space-y-1">
+      {avgError && (
+        <div className="grid grid-cols-2 gap-2">
+          <div className="bg-slate-900/60 rounded-lg p-2 text-center">
+            <div className="text-xs text-slate-500">Avg rounding error</div>
+            <div className="text-sm font-mono text-amber-400">±{avgError}</div>
+          </div>
+          <div className="bg-slate-900/60 rounded-lg p-2 text-center">
+            <div className="text-xs text-slate-500">Max rounding error</div>
+            <div className="text-sm font-mono text-amber-400">±{maxError}</div>
+          </div>
+        </div>
+      )}
+
+      <div className="bg-slate-900/60 rounded-xl p-3 text-xs text-slate-400 space-y-1.5">
         <p>
-          <span className="text-amber-400 font-medium">Rounding</span> maps each float to the
-          nearest integer, enabling lossless entropy coding of discrete symbols.
+          Each float is rounded to the nearest integer — an average error of <span className="text-amber-400 font-medium">±{avgError}</span> per value in this sample.
+          Small individually, but this rounding is <span className="text-slate-300">irreversible</span> and is the only lossy step in the entire pipeline.
         </p>
         <p>
-          During training, uniform noise <span className="font-mono text-purple-400">U(−0.5, 0.5)</span> is
-          added to simulate quantization while keeping gradients defined.
+          The upside: integers can be entropy-coded without any ambiguity. During training, uniform noise <span className="font-mono text-purple-400">U(−0.5, 0.5)</span> is substituted for rounding so gradients remain defined.
         </p>
       </div>
     </motion.div>

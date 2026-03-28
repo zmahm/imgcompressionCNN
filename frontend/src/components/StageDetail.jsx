@@ -84,6 +84,11 @@ function CNNAnimation({ label, reverse = false }) {
 }
 
 function PreprocessingDetail({ data }) {
+  const rawKB = data ? (data.original_bytes / 1024).toFixed(1) : null;
+  const padW = data ? Math.ceil(data.width / 64) * 64 : null;
+  const padH = data ? Math.ceil(data.height / 64) * 64 : null;
+  const wasPadded = data && (padW !== data.width || padH !== data.height);
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
       <div className="grid grid-cols-2 gap-3">
@@ -99,42 +104,97 @@ function PreprocessingDetail({ data }) {
         {data && (
           <>
             <div className="bg-slate-900/60 rounded-lg p-2 text-center">
-              <div className="text-xs text-slate-500">Dimensions</div>
+              <div className="text-xs text-slate-500">Model input size</div>
               <div className="text-sm font-mono text-blue-400">{data.width} × {data.height}</div>
             </div>
             <div className="bg-slate-900/60 rounded-lg p-2 text-center">
-              <div className="text-xs text-slate-500">Original size</div>
-              <div className="text-sm font-mono text-blue-400">
-                {(data.original_bytes / 1024).toFixed(1)} KB
-              </div>
+              <div className="text-xs text-slate-500">Uncompressed RGB</div>
+              <div className="text-sm font-mono text-blue-400">{rawKB} KB</div>
             </div>
           </>
         )}
       </div>
-      <p className="text-xs text-slate-500">
-        Image resized to max 768px and padded to multiples of 64 (encoder stride).
-        Normalised to [0, 1] float tensor.
-      </p>
+      {data && (
+        <div className="bg-slate-900/60 rounded-xl p-3 text-xs text-slate-400 space-y-1.5">
+          <p>
+            The image is <span className="text-blue-400 font-medium">{data.width}×{data.height} px</span> — stored as raw RGB that would take <span className="text-blue-400 font-medium">{rawKB} KB</span> with no compression at all. This is the true baseline the neural bitstream will be measured against.
+          </p>
+          {wasPadded && (
+            <p>
+              The encoder requires dimensions that are multiples of 64, so the image was silently padded to <span className="text-slate-300 font-mono">{padW}×{padH}</span> with black pixels before being converted to a float tensor.
+            </p>
+          )}
+          {!wasPadded && (
+            <p>
+              Dimensions are already multiples of 64, so no padding was needed. Pixel values were normalised from <span className="font-mono text-slate-300">0–255</span> integers to <span className="font-mono text-slate-300">0.0–1.0</span> floats before being fed into the encoder.
+            </p>
+          )}
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
+function EncodingDetail() {
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
+      <CNNAnimation label="Encoder" />
+      <div className="bg-slate-900/60 rounded-xl p-3 text-xs text-slate-400 space-y-1.5">
+        <p>
+          The encoder network (<span className="text-purple-400 font-medium">g_a</span>) applies four convolutional layers, each followed by a downsampling step. With every layer the spatial resolution shrinks while the number of channels grows — trading pixel detail for compact abstract features.
+        </p>
+        <p>
+          By the final layer the spatial grid is <span className="text-purple-400 font-medium">16× smaller</span> in each dimension than the input, but the 192 channels capture the patterns needed to reconstruct a convincing image on the other side.
+        </p>
+      </div>
+    </motion.div>
+  );
+}
+
+function DecodingDetail() {
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
+      <CNNAnimation label="Decoder" reverse />
+      <div className="bg-slate-900/60 rounded-xl p-3 text-xs text-slate-400 space-y-1.5">
+        <p>
+          The synthesis network (<span className="text-indigo-400 font-medium">g_s</span>) mirrors the encoder in reverse — transposed convolutions upsample the latent grid back to full image resolution, progressively rebuilding pixel values from the abstract channel features.
+        </p>
+        <p>
+          Because the quantization in the previous step was lossy, the decoder is <span className="text-slate-300">reconstructing</span> rather than recovering. Fine textures and sharp edges may be slightly softened — how much depends on the quality level chosen.
+        </p>
+      </div>
+    </motion.div>
+  );
+}
+
+function PostprocessingDetail() {
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
+      <div className="flex justify-center py-4">
+        <svg className="w-8 h-8 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+        </svg>
+      </div>
+      <div className="bg-slate-900/60 rounded-xl p-3 text-xs text-slate-400 space-y-1.5">
+        <p>
+          <span className="text-emerald-400 font-medium">PSNR</span> (Peak Signal-to-Noise Ratio) measures pixel-level difference in decibels — higher is better. Above 35 dB is generally considered good quality; above 40 dB is near-transparent.
+        </p>
+        <p>
+          <span className="text-emerald-400 font-medium">MS-SSIM</span> (Multi-Scale Structural Similarity) mimics human perception by comparing luminance, contrast, and local structure across multiple resolutions. A score above 0.95 is typically indistinguishable from the original at a glance.
+        </p>
+      </div>
     </motion.div>
   );
 }
 
 const DETAIL_COMPONENTS = {
   preprocessing:  (stageData) => <PreprocessingDetail data={stageData.preprocessing} />,
-  encoding:       () => <CNNAnimation label="Encoder" />,
+  encoding:       () => <EncodingDetail />,
   latent:         (stageData) => <LatentHeatmap data={stageData.latent} />,
   quantizing:     (stageData) => <QuantizationViz data={stageData.quantizing} />,
   entropy_coding: (stageData) => <BitStreamViz data={stageData.entropy_coding} />,
-  decoding:       () => <CNNAnimation label="Decoder" reverse />,
-  postprocessing: () => (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-      className="text-center py-6 text-slate-400">
-      <svg className="w-8 h-8 mx-auto mb-2 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
-      </svg>
-      Computing PSNR, SSIM, and bits-per-pixel…
-    </motion.div>
-  ),
+  decoding:       () => <DecodingDetail />,
+  postprocessing: () => <PostprocessingDetail />,
 };
 
 const STAGE_LABELS = {

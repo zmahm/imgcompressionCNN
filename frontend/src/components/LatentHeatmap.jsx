@@ -19,6 +19,8 @@ export default function LatentHeatmap({ data }) {
   }
 
   const [, C, H, W] = data.shape || [1, '?', '?', '?'];
+  const spatialReduction = (H !== '?' && W !== '?') ? H * W : null;
+  const valueRange = (data.min != null && data.max != null) ? (data.max - data.min).toFixed(2) : null;
 
   return (
     <motion.div
@@ -47,7 +49,7 @@ export default function LatentHeatmap({ data }) {
       {/* Stats */}
       <div className="grid grid-cols-3 gap-2">
         {[
-          { label: 'Shape', value: `${C}×${H}×${W}` },
+          { label: 'Shape (C×H×W)', value: `${C}×${H}×${W}` },
           { label: 'Min', value: data.min?.toFixed(3) },
           { label: 'Max', value: data.max?.toFixed(3) },
         ].map(({ label, value }) => (
@@ -58,9 +60,21 @@ export default function LatentHeatmap({ data }) {
         ))}
       </div>
 
+      {/* Dynamic explanation */}
+      <div className="bg-slate-900/60 rounded-xl p-3 text-xs text-slate-400 space-y-1.5">
+        <p>
+          The encoder output is a <span className="text-cyan-400 font-medium">{C}×{H}×{W}</span> tensor — {C} feature channels, each a {H}×{W} spatial grid.{' '}
+          {spatialReduction && <span>That's <span className="text-cyan-400 font-medium">{spatialReduction.toLocaleString()}</span> positions per channel, compared to the full pixel grid of the input.</span>}
+        </p>
+        <p>
+          The heatmap shows the <span className="text-slate-300">mean activation</span> across all {C} channels — bright yellow regions hold the most energy and will be harder to compress than the dark areas.
+          {valueRange && <span> The values span a range of <span className="text-cyan-400 font-medium">{valueRange}</span>, from {data.min?.toFixed(2)} to {data.max?.toFixed(2)}.</span>}
+        </p>
+      </div>
+
       {/* Sample latent values */}
       <div>
-        <p className="text-xs text-slate-500 mb-2">Sample latent values (continuous floats)</p>
+        <p className="text-xs text-slate-500 mb-2">Sample latent values — continuous floats, about to be rounded</p>
         <div className="flex flex-wrap gap-1.5">
           {(data.sample_values || []).slice(0, 12).map((v, i) => (
             <span

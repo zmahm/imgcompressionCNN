@@ -67,6 +67,14 @@ export default function BitStreamViz({ data }) {
 
   const { compressed_bytes, bpp, total_pixels, compression_ratio } = data;
 
+  // Rough bpp context: lossless PNG ~16 bpp for photos, JPEG medium quality ~2 bpp
+  const vsPng = bpp ? (16 / bpp).toFixed(1) : null;
+  const vsJpeg = bpp ? (2 / bpp).toFixed(1) : null;
+  const qualityLabel = bpp < 0.5 ? 'very aggressive — expect visible quality loss'
+    : bpp < 1.0 ? 'efficient — good quality with significant savings'
+    : bpp < 2.0 ? 'moderate — close to JPEG quality at similar sizes'
+    : 'conservative — high quality, modest compression';
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
       {/* Compressed bitstream preview */}
@@ -99,11 +107,17 @@ export default function BitStreamViz({ data }) {
         />
       )}
 
-      <p className="text-xs text-slate-500">
-        <span className="text-green-400 font-medium">Arithmetic coding</span> assigns shorter bit
-        sequences to frequently occurring latent symbols, exploiting the entropy model's learned
-        probability distribution.
-      </p>
+      <div className="bg-slate-900/60 rounded-xl p-3 text-xs text-slate-400 space-y-1.5">
+        <p>
+          At <span className="text-green-400 font-medium">{bpp?.toFixed(3)} bits per pixel</span> this is{' '}
+          <span className="text-slate-300 font-medium">{vsPng}× smaller than lossless PNG</span> and{' '}
+          <span className="text-slate-300 font-medium">{vsJpeg}× smaller than a typical JPEG</span> at the same pixel count.
+          That puts this compression in the <span className="text-green-400">{qualityLabel}</span> range.
+        </p>
+        <p>
+          <span className="text-green-400 font-medium">Arithmetic coding</span> assigns shorter codes to latent integers that the entropy model predicted as likely, and longer codes to surprises — squeezing out redundancy without losing any more information.
+        </p>
+      </div>
     </motion.div>
   );
 }
