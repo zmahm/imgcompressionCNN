@@ -38,8 +38,15 @@ _ALLOWED_FORMATS = {"JPEG", "PNG", "WEBP", "BMP", "GIF", "TIFF"}
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB
 
 
-def _preprocess(image_bytes: bytes) -> Image.Image:
-    """Validate, decode, resize and pad image. Raises ValueError on bad input."""
+def _preprocess(image_bytes: bytes) -> tuple:
+    """Validate, decode, resize and pad image. Raises ValueError on bad input.
+
+    Returns:
+        (padded_img, content_width, content_height) where content dimensions
+        are the true image size after any resize but before stride padding.
+        The padded image is what the model sees; crop back to content dims
+        after reconstruction to strip the padding from the output.
+    """
     if len(image_bytes) > MAX_UPLOAD_BYTES:
         raise ValueError("Image exceeds 20 MB limit.")
     if len(image_bytes) == 0:
@@ -65,7 +72,10 @@ def _preprocess(image_bytes: bytes) -> Image.Image:
         w, h = int(w * scale), int(h * scale)
         img = img.resize((w, h), Image.LANCZOS)
 
-    # Pad to multiple of STRIDE
+    # Content dimensions — what the user actually sees, before padding
+    content_w, content_h = w, h
+
+    # Pad to multiple of STRIDE (encoder requirement only)
     pw = ((w + STRIDE - 1) // STRIDE) * STRIDE
     ph = ((h + STRIDE - 1) // STRIDE) * STRIDE
     if pw != w or ph != h:
@@ -73,7 +83,7 @@ def _preprocess(image_bytes: bytes) -> Image.Image:
         padded.paste(img, (0, 0))
         img = padded
 
-    return img
+    return img, content_w, content_h
 
 
 def _img_to_tensor(img: Image.Image) -> torch.Tensor:
@@ -137,16 +147,16 @@ async def compress_image(
     await send({"type": "stage_start", "stage": "preprocessing",
                 "message": "Loading and normalising the image — resizing to fit the model input…"})
 
-    img = _preprocess(image_bytes)
-    w, h = img.size
-    # Uncompressed raw RGB byte count — true baseline before any coding.
-    original_bytes = w * h * 3
-    orig_b64 = _to_base64_webp(img)
+    img, content_w, content_h = _preprocess(image_bytes)
+    # img may be larger than content_w × content_h due to stride padding.
+    # All model operations use the padded image; outputs are cropped back.
+    original_bytes = content_w * content_h * 3  # true content baseline
+    orig_b64 = _to_base64_webp(img.crop((0, 0, content_w, content_h)))
     x = _img_to_tensor(img)
 
     await send({"type": "stage_data", "stage": "preprocessing",
-                "data": {"width": w, "height": h, "original_bytes": original_bytes,
-                         "preview": orig_b64}})
+                "data": {"width": content_w, "height": content_h,
+                         "original_bytes": original_bytes, "preview": orig_b64}})
     await pause("preprocess_done")
 
     # ── Stage 2: Encoding ─────────────────────────────────────────────────────
@@ -205,7 +215,7 @@ async def compress_image(
     with torch.no_grad():
         compressed = model.compress(x)
         compressed_bytes = sum(len(s[0]) for s in compressed["strings"])
-        total_pixels = w * h
+        total_pixels = content_w * content_h  # content only, not padding
         bpp = (compressed_bytes * 8) / total_pixels
 
     await send({"type": "stage_data", "stage": "entropy_coding",
@@ -238,11 +248,14 @@ async def compress_image(
                 "message": "Computing PSNR and MS-SSIM between the original and reconstructed image to quantify quality loss…"})
 
     with torch.no_grad():
-        recon_img = _tensor_to_img(x_hat)
+        # Crop padding from both the reconstructed image and the reference
+        # so output dimensions match the original content and metrics are
+        # not diluted by the zero-padded border region.
+        recon_img = _tensor_to_img(x_hat).crop((0, 0, content_w, content_h))
         recon_b64 = _to_base64_webp(recon_img)
 
-        x_np = x.squeeze(0).permute(1, 2, 0).cpu().numpy()
-        x_hat_np = x_hat.squeeze(0).permute(1, 2, 0).clamp(0, 1).cpu().numpy()
+        x_np = x.squeeze(0).permute(1, 2, 0).cpu().numpy()[:content_h, :content_w]
+        x_hat_np = x_hat.squeeze(0).permute(1, 2, 0).clamp(0, 1).cpu().numpy()[:content_h, :content_w]
 
         psnr = compute_psnr(x_np, x_hat_np)
         ssim = compute_ssim(x_np, x_hat_np)
@@ -260,6 +273,6 @@ async def compress_image(
                     "original_bytes": original_bytes,
                     "compression_ratio": round(original_bytes / compressed_bytes, 2)
                     if compressed_bytes else 0,
-                    "dimensions": {"width": w, "height": h},
+                    "dimensions": {"width": content_w, "height": content_h},
                     "quality": quality,
                 }})
