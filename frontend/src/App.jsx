@@ -57,8 +57,12 @@ export default function App() {
   } = useWebSocketCompression();
 
   const [quality, setQuality] = useState(4);
+  const [selectedStage, setSelectedStage] = useState(null);
 
-  const handleCompress = (file) => compress(file, quality, slow);
+  const handleCompress = (file) => {
+    setSelectedStage(null);
+    compress(file, quality, slow);
+  };
 
   return (
     <div className="relative min-h-screen bg-neural-950 text-white">
@@ -131,13 +135,15 @@ export default function App() {
                   currentMessage={currentMessage}
                   completedStages={completedStages}
                   stageProgress={stageProgress}
+                  selectedStage={selectedStage}
+                  onStageClick={setSelectedStage}
                 />
               </motion.div>
 
               {/* Stage-specific detail visualization */}
-              {status === 'compressing' && (
+              {(status === 'compressing' || (status === 'complete' && selectedStage)) && (
                 <StageDetail
-                  currentStage={currentStage}
+                  stage={selectedStage || currentStage}
                   stageData={stageData}
                 />
               )}
@@ -164,7 +170,7 @@ export default function App() {
         </main>
 
         <footer className="relative z-10 text-center py-4 text-xs text-slate-700 border-t border-slate-900">
-          Neural Image Compression · bmshj2018 Factorized Prior · CompressAI · PyTorch
+          &copy; {new Date().getFullYear()} Zeshan Mahmood · Neural Image Compression · bmshj2018 Factorized Prior
         </footer>
       </div>
     </div>

@@ -147,18 +147,18 @@ const STAGE_LABELS = {
   postprocessing: { title: 'Post-processing', subtitle: 'Metrics computation' },
 };
 
-export default function StageDetail({ currentStage, stageData }) {
-  if (!currentStage || currentStage === 'complete') return null;
+export default function StageDetail({ stage, stageData }) {
+  if (!stage || stage === 'complete') return null;
 
-  const render = DETAIL_COMPONENTS[currentStage];
-  const meta = STAGE_LABELS[currentStage];
+  const render = DETAIL_COMPONENTS[stage];
+  const meta = STAGE_LABELS[stage];
 
   if (!render || !meta) return null;
 
   return (
     <AnimatePresence mode="wait">
       <motion.div
-        key={currentStage}
+        key={stage}
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -16 }}

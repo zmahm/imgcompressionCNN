@@ -11,9 +11,10 @@ const COLOR_CLASSES = {
   emerald: { border: 'border-emerald-500/60', bg: 'bg-emerald-500/10', text: 'text-emerald-400', glow: 'shadow-emerald-500/30' },
 };
 
-function StageNode({ stageKey, isActive, isComplete, progress, index }) {
+function StageNode({ stageKey, isActive, isComplete, isSelected, progress, index, onClick }) {
   const meta = STAGE_META[stageKey];
   const colors = COLOR_CLASSES[meta.color];
+  const clickable = isComplete && !isActive;
 
   return (
     <motion.div
@@ -21,8 +22,13 @@ function StageNode({ stageKey, isActive, isComplete, progress, index }) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05 }}
+      onClick={clickable ? onClick : undefined}
       className={`relative flex flex-col items-center gap-2 p-3 rounded-xl border transition-all duration-500 flex-1 min-w-[80px] max-w-[110px] ${
-        isActive
+        clickable ? 'cursor-pointer hover:border-emerald-400/60 hover:bg-emerald-500/10' : ''
+      } ${
+        isSelected
+          ? 'border-emerald-400 bg-emerald-500/15 ring-1 ring-emerald-400/40'
+          : isActive
           ? `${colors.border} ${colors.bg} shadow-lg ${colors.glow} stage-active-glow`
           : isComplete
           ? 'border-emerald-500/40 bg-emerald-500/5'
@@ -104,7 +110,7 @@ function Connector({ fromActive, toActive, isActive }) {
   );
 }
 
-export default function PipelineViz({ currentStage, currentMessage, completedStages, stageProgress }) {
+export default function PipelineViz({ currentStage, currentMessage, completedStages, stageProgress, selectedStage, onStageClick }) {
   const currentIdx = STAGE_ORDER.indexOf(currentStage);
 
   return (
@@ -128,6 +134,7 @@ export default function PipelineViz({ currentStage, currentMessage, completedSta
         {STAGE_ORDER.map((stage, idx) => {
           const isActive = stage === currentStage;
           const isComplete = completedStages.has(stage);
+          const isSelected = stage === selectedStage;
           const progress = stageProgress[stage];
 
           return (
@@ -136,8 +143,10 @@ export default function PipelineViz({ currentStage, currentMessage, completedSta
                 stageKey={stage}
                 isActive={isActive}
                 isComplete={isComplete}
+                isSelected={isSelected}
                 progress={progress}
                 index={idx}
+                onClick={() => onStageClick(isSelected ? null : stage)}
               />
               {idx < STAGE_ORDER.length - 1 && (
                 <Connector
@@ -148,6 +157,13 @@ export default function PipelineViz({ currentStage, currentMessage, completedSta
           );
         })}
       </div>
+
+      {/* Hint: click completed stages */}
+      {completedStages.size > 0 && (
+        <p className="text-[10px] text-slate-600 text-right mt-1 pr-1">
+          click a completed stage to review it
+        </p>
+      )}
 
       {/* Current stage message */}
       <AnimatePresence mode="wait">
