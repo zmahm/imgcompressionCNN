@@ -167,20 +167,128 @@ function DecodingDetail() {
   );
 }
 
-function PostprocessingDetail() {
+// PSNR scale: 0–50 dB, with labelled quality zones
+const PSNR_ZONES = [
+  { max: 25, label: 'Poor',      color: '#ef4444', bg: 'bg-red-500' },
+  { max: 32, label: 'Acceptable',color: '#f97316', bg: 'bg-orange-500' },
+  { max: 38, label: 'Good',      color: '#eab308', bg: 'bg-yellow-500' },
+  { max: 43, label: 'Very good', color: '#22c55e', bg: 'bg-green-500' },
+  { max: 50, label: 'Excellent', color: '#10b981', bg: 'bg-emerald-400' },
+];
+
+function PsnrGauge({ psnr }) {
+  const SCALE_MAX = 50;
+  const pct = Math.min((psnr / SCALE_MAX) * 100, 100);
+  const zone = PSNR_ZONES.find(z => psnr < z.max) || PSNR_ZONES[PSNR_ZONES.length - 1];
+
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
-      <div className="flex justify-center py-4">
-        <svg className="w-8 h-8 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
-        </svg>
+    <div className="space-y-2">
+      <div className="flex justify-between items-baseline">
+        <span className="text-xs text-slate-400">PSNR</span>
+        <span className="text-lg font-bold font-mono" style={{ color: zone.color }}>
+          {psnr} dB
+          <span className="text-xs font-normal text-slate-400 ml-2">— {zone.label}</span>
+        </span>
       </div>
+      {/* Gradient track */}
+      <div className="relative h-4 rounded-full overflow-hidden"
+        style={{ background: 'linear-gradient(to right, #ef4444 0%, #f97316 20%, #eab308 42%, #22c55e 66%, #10b981 90%)' }}>
+        {/* Dark overlay for the portion beyond current value */}
+        <div className="absolute inset-y-0 right-0 bg-slate-900/70 rounded-r-full transition-all"
+          style={{ left: `${pct}%` }} />
+        {/* Marker */}
+        <motion.div
+          className="absolute top-0 bottom-0 w-0.5 bg-white shadow"
+          initial={{ left: '0%' }}
+          animate={{ left: `${pct}%` }}
+          transition={{ duration: 0.8, ease: 'easeOut' }}
+        />
+      </div>
+      <div className="flex justify-between text-[10px] text-slate-600 font-mono">
+        <span>0</span><span>25</span><span>32</span><span>38</span><span>43</span><span>50 dB</span>
+      </div>
+    </div>
+  );
+}
+
+function SsimBar({ ssim }) {
+  const pct = Math.min(ssim * 100, 100);
+  const color = ssim >= 0.97 ? '#10b981' : ssim >= 0.92 ? '#22c55e' : ssim >= 0.85 ? '#eab308' : '#f97316';
+  const label = ssim >= 0.97 ? 'Near-transparent' : ssim >= 0.92 ? 'Good' : ssim >= 0.85 ? 'Acceptable' : 'Noticeable loss';
+
+  return (
+    <div className="space-y-2">
+      <div className="flex justify-between items-baseline">
+        <span className="text-xs text-slate-400">MS-SSIM</span>
+        <span className="text-lg font-bold font-mono" style={{ color }}>
+          {ssim}
+          <span className="text-xs font-normal text-slate-400 ml-2">— {label}</span>
+        </span>
+      </div>
+      <div className="relative h-4 rounded-full bg-slate-800 overflow-hidden">
+        <motion.div
+          className="absolute inset-y-0 left-0 rounded-full"
+          style={{ background: `linear-gradient(to right, #f97316, ${color})` }}
+          initial={{ width: '0%' }}
+          animate={{ width: `${pct}%` }}
+          transition={{ duration: 0.8, ease: 'easeOut', delay: 0.2 }}
+        />
+      </div>
+      <div className="flex justify-between text-[10px] text-slate-600 font-mono">
+        <span>0</span><span>0.5</span><span>0.85</span><span>0.92</span><span>0.97</span><span>1.0</span>
+      </div>
+    </div>
+  );
+}
+
+function PostprocessingDetail({ result }) {
+  if (!result) {
+    return (
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
+        <div className="flex items-center justify-center gap-3 py-6 text-slate-500">
+          <motion.div
+            className="w-4 h-4 border-2 border-emerald-500/40 border-t-emerald-400 rounded-full"
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+          />
+          <span className="text-sm">Computing PSNR and MS-SSIM…</span>
+        </div>
+        <div className="bg-slate-900/60 rounded-xl p-3 text-xs text-slate-400 space-y-1.5">
+          <p><span className="text-emerald-400 font-medium">PSNR</span> measures pixel-level error in decibels — higher is better. &gt;35 dB is good quality; &gt;40 dB is near-transparent.</p>
+          <p><span className="text-emerald-400 font-medium">MS-SSIM</span> compares luminance, contrast, and structure across scales. Above 0.95 is typically indistinguishable at a glance.</p>
+        </div>
+      </motion.div>
+    );
+  }
+
+  const { psnr, ssim, bpp, compressed_bytes, original_bytes, compression_ratio } = result;
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+      <PsnrGauge psnr={psnr} />
+      <SsimBar ssim={ssim} />
+
+      <div className="grid grid-cols-3 gap-2">
+        {[
+          { label: 'Bits / pixel', value: bpp?.toFixed(4), color: 'text-cyan-400' },
+          { label: 'Compression', value: `${compression_ratio}×`, color: 'text-amber-400' },
+          { label: 'Bitstream', value: `${(compressed_bytes / 1024).toFixed(1)} KB`, color: 'text-emerald-400' },
+        ].map(({ label, value, color }) => (
+          <div key={label} className="bg-slate-900/60 rounded-lg p-2 text-center">
+            <div className="text-xs text-slate-500">{label}</div>
+            <div className={`text-sm font-mono font-bold mt-0.5 ${color}`}>{value}</div>
+          </div>
+        ))}
+      </div>
+
       <div className="bg-slate-900/60 rounded-xl p-3 text-xs text-slate-400 space-y-1.5">
         <p>
-          <span className="text-emerald-400 font-medium">PSNR</span> (Peak Signal-to-Noise Ratio) measures pixel-level difference in decibels — higher is better. Above 35 dB is generally considered good quality; above 40 dB is near-transparent.
+          <span className="text-emerald-400 font-medium">PSNR</span> measures the pixel-level difference as a signal-to-noise ratio — every +6 dB roughly halves the average error per pixel.
+          At <span className="font-mono" style={{ color: (PSNR_ZONES.find(z => psnr < z.max) || PSNR_ZONES[4]).color }}>{psnr} dB</span>, the reconstruction is {psnr >= 38 ? 'very close to the original — differences are hard to spot without side-by-side comparison' : psnr >= 32 ? 'broadly faithful but fine textures and sharp edges show some softening' : 'noticeably degraded — consider using a higher quality level'}.
         </p>
         <p>
-          <span className="text-emerald-400 font-medium">MS-SSIM</span> (Multi-Scale Structural Similarity) mimics human perception by comparing luminance, contrast, and local structure across multiple resolutions. A score above 0.95 is typically indistinguishable from the original at a glance.
+          <span className="text-emerald-400 font-medium">MS-SSIM</span> is more aligned with human perception — it compares luminance, contrast, and local structure at multiple scales rather than raw pixel values.
+          A score of <span className="font-mono text-emerald-300">{ssim}</span> means the reconstructed image preserves {Math.round(ssim * 100)}% of the original's structural similarity.
         </p>
       </div>
     </motion.div>
@@ -188,13 +296,13 @@ function PostprocessingDetail() {
 }
 
 const DETAIL_COMPONENTS = {
-  preprocessing:  (stageData) => <PreprocessingDetail data={stageData.preprocessing} />,
-  encoding:       () => <EncodingDetail />,
-  latent:         (stageData) => <LatentHeatmap data={stageData.latent} />,
-  quantizing:     (stageData) => <QuantizationViz data={stageData.quantizing} />,
-  entropy_coding: (stageData) => <BitStreamViz data={stageData.entropy_coding} />,
-  decoding:       () => <DecodingDetail />,
-  postprocessing: () => <PostprocessingDetail />,
+  preprocessing:  (stageData, result) => <PreprocessingDetail data={stageData.preprocessing} />,
+  encoding:       (stageData, result) => <EncodingDetail />,
+  latent:         (stageData, result) => <LatentHeatmap data={stageData.latent} />,
+  quantizing:     (stageData, result) => <QuantizationViz data={stageData.quantizing} />,
+  entropy_coding: (stageData, result) => <BitStreamViz data={stageData.entropy_coding} />,
+  decoding:       (stageData, result) => <DecodingDetail />,
+  postprocessing: (stageData, result) => <PostprocessingDetail result={result} />,
 };
 
 const STAGE_LABELS = {
@@ -207,7 +315,7 @@ const STAGE_LABELS = {
   postprocessing: { title: 'Post-processing', subtitle: 'Metrics computation' },
 };
 
-export default function StageDetail({ stage, stageData }) {
+export default function StageDetail({ stage, stageData, result }) {
   if (!stage || stage === 'complete') return null;
 
   const render = DETAIL_COMPONENTS[stage];
@@ -229,7 +337,7 @@ export default function StageDetail({ stage, stageData }) {
           <h3 className="text-sm font-semibold text-white">{meta.title}</h3>
           <p className="text-xs text-slate-500">{meta.subtitle}</p>
         </div>
-        {render(stageData)}
+        {render(stageData, result)}
       </motion.div>
     </AnimatePresence>
   );

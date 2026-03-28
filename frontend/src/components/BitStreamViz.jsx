@@ -31,19 +31,27 @@ function BitsBar({ compressed, original, bpp }) {
 }
 
 function BitStream() {
-  const bits = Array.from({ length: 48 }, () => Math.round(Math.random()));
+  // 96 bits in 6 groups of 16 — each group fades in together so the full
+  // stream is visible within ~0.35 s, well inside the 1 s fast-mode stage.
+  const groups = Array.from({ length: 6 }, () =>
+    Array.from({ length: 16 }, () => Math.round(Math.random()))
+  );
   return (
-    <div className="font-mono text-xs leading-relaxed break-all text-green-500/70 select-none">
-      {bits.map((b, i) => (
-        <motion.span
-          key={i}
+    <div className="font-mono text-xs leading-relaxed select-none space-y-0.5">
+      {groups.map((group, gi) => (
+        <motion.div
+          key={gi}
+          className="flex gap-px flex-wrap"
           initial={{ opacity: 0 }}
-          animate={{ opacity: [0, 1, 0.7] }}
-          transition={{ delay: i * 0.02, duration: 0.4 }}
-          className={b === 1 ? 'text-green-400' : 'text-slate-600'}
+          animate={{ opacity: 1 }}
+          transition={{ delay: gi * 0.05, duration: 0.2 }}
         >
-          {b}
-        </motion.span>
+          {group.map((b, bi) => (
+            <span key={bi} className={b === 1 ? 'text-green-400' : 'text-slate-600'}>
+              {b}
+            </span>
+          ))}
+        </motion.div>
       ))}
       <motion.span
         animate={{ opacity: [1, 0] }}

@@ -145,6 +145,7 @@ export default function App() {
                 <StageDetail
                   stage={selectedStage || currentStage}
                   stageData={stageData}
+                  result={result}
                 />
               )}
 
